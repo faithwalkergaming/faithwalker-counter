@@ -6,43 +6,45 @@ app = Flask(__name__)
 
 API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 
-CACHE = {
-    "timestamp": 0,
-    "data": {"count": 0}
-}
-
-CACHE_TIME = 310  # seconds
+CACHE = {"timestamp": 0, "data": {"count": 0}}
+CACHE_TIME = 310
 
 
-def fetch_total():
-    r = requests.get(API_URL, timeout=10)
-    data = r.json().get("servers", [])
+def safe_fetch():
+    try:
+        r = requests.get(API_URL, timeout=10)
+        r.raise_for_status()
+        data = r.json()
 
-    total = sum(
-        int(s.get("playerAmount", 0))
-        for s in data
-        if int(s.get("playerAmount", 0)) > 0
-    )
+        servers = data.get("servers", [])
 
-    return total
+        total = sum(
+            int(s.get("playerAmount", 0))
+            for s in servers
+            if int(s.get("playerAmount", 0)) > 0
+        )
+
+        return total
+
+    except Exception as e:
+        print("Fetch error:", e)
+        return None
 
 
 @app.route("/")
 def total_players():
     now = time.time()
 
-    # use cache if still valid
+    # use cache if valid
     if now - CACHE["timestamp"] < CACHE_TIME:
         return jsonify(CACHE["data"])
 
-    # refresh cache
-    try:
-        total = fetch_total()
+    total = safe_fetch()
+
+    # only update if successful
+    if total is not None:
         CACHE["data"] = {"count": total}
         CACHE["timestamp"] = now
 
-    except Exception as e:
-        print("Error:", e)
-        CACHE["data"] = {"count": 0}
-
+    # ALWAYS return valid JSON
     return jsonify(CACHE["data"])

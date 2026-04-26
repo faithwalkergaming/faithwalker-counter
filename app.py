@@ -21,5 +21,6 @@ def total_players():
 
         return jsonify({"count": total})
 
-    except:
+    except Exception as e:
+        print("Error:", e)
         return jsonify({"count": 0})

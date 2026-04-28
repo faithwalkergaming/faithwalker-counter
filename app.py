@@ -17,24 +17,34 @@ CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS
+# FETCH TOTAL PLAYERS (FINAL FIX)
 # -----------------------
 def fetch_total():
     try:
-        r = requests.get(API_URL, timeout=10)
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
+        }
+
+        r = requests.get(API_URL, headers=headers, timeout=10)
         r.raise_for_status()
         data = r.json()
 
-        servers = data.get("servers", [])
+        servers = data.get("servers")
+
+        # 🚨 CRITICAL: detect broken / empty API response
+        if not isinstance(servers, list) or len(servers) == 0:
+            print("[WARN] API returned empty or invalid server list")
+            return None
 
         total = 0
 
         for s in servers:
-            # IMPORTANT: raw value only, no filtering
-            players = s.get("playerAmount", 0)
+            players = s.get("playerAmount")
 
             try:
-                total += int(players)
+                if players is not None:
+                    total += int(players)
             except:
                 continue
 
@@ -53,7 +63,9 @@ def update_cache():
 
     total = fetch_total()
 
+    # 🚨 IMPORTANT: do NOT overwrite good value with bad data
     if total is None:
+        print("[INFO] Keeping last known good value:", CACHE["value"])
         return False
 
     with LOCK:
@@ -74,7 +86,7 @@ threading.Thread(target=background_loop, daemon=True).start()
 
 
 # -----------------------
-# AGE FORMATTER
+# TIME FORMATTER
 # -----------------------
 def format_age(seconds):
     minutes = int(seconds / 60)
@@ -82,7 +94,7 @@ def format_age(seconds):
 
 
 # -----------------------
-# ENDPOINT
+# API ENDPOINT
 # -----------------------
 @app.route("/")
 def total_players():

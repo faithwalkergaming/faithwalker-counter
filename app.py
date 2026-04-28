@@ -8,20 +8,17 @@ app = Flask(__name__)
 API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 
 CACHE = {
-    "timestamp": 0,
-    "data": {"value": "0"},
+    "value": "0 ➖ (+0)",
     "last_count": None,
-    "last_valid_count": 0,
-    "last_success_time": time.time()
+    "last_success": time.time()
 }
 
-CACHE_TIME = 310
-OFFLINE_THRESHOLD = 17 * 60  # 17 minutes
 LOCK = threading.Lock()
+CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH FUNCTION
+# FETCH FUNCTION (SAFE)
 # -----------------------
 def fetch_total():
     try:
@@ -34,114 +31,55 @@ def fetch_total():
             for s in servers
             if int(s.get("playerAmount", 0)) > 0
         )
-    except Exception as e:
-        print("[ERROR] Fetch failed:", e)
+    except:
         return None
 
 
 # -----------------------
-# UPDATE CACHE (with decay + offline logic)
+# BACKGROUND UPDATER
 # -----------------------
-def update_cache():
+def updater():
     global CACHE
 
-    total = fetch_total()
-    now = time.time()
-
-    with LOCK:
-
-        # -----------------------
-        # API FAILED
-        # -----------------------
-        if total is None:
-            print("[WARN] API failed, keeping last value")
-            return False
-
-        # mark successful fetch time
-        CACHE["last_success_time"] = now
-
-        last = CACHE["last_count"]
-
-        # -----------------------
-        # DECAY LOGIC (smooth trend)
-        # -----------------------
-        if last is None:
-            delta = 0
-            trend = "➖"
-
-        else:
-            delta = total - last
-
-            # decay smoothing: ignore tiny fluctuations (-1 to +1)
-            if -1 <= delta <= 1:
-                trend = "➖"
-                delta = 0
-            elif delta > 1:
-                trend = "▲"
-            else:
-                trend = "▼"
-
-        # -----------------------
-        # FORMAT OUTPUT
-        # -----------------------
-        if total == 0:
-            formatted = "0"
-        else:
-            formatted = f"{total} {trend} ({delta:+d})"
-
-        CACHE["data"] = {"value": formatted}
-        CACHE["last_count"] = total
-        CACHE["last_valid_count"] = total
-        CACHE["timestamp"] = now
-
-        print(f"[UPDATE] {formatted}")
-
-    return True
-
-
-# -----------------------
-# INITIAL FETCH
-# -----------------------
-def initial_fetch():
-    print("[INIT] Starting fetch...")
-
-    for _ in range(10):
-        if update_cache():
-            print("[INIT] Success")
-            return
-        time.sleep(2)
-
-    print("[INIT] Failed initial fetch")
-
-
-# -----------------------
-# BACKGROUND LOOP
-# -----------------------
-def background_loop():
     while True:
-        update_cache()
+        total = fetch_total()
+
+        if total is not None:
+            with LOCK:
+                last = CACHE["last_count"]
+
+                if last is None:
+                    delta = 0
+                    trend = "➖"
+                else:
+                    delta = total - last
+
+                    if delta > 0:
+                        trend = "▲"
+                    elif delta < 0:
+                        trend = "▼"
+                    else:
+                        trend = "➖"
+
+                formatted = f"{total} {trend} ({delta:+d})"
+
+                CACHE["value"] = formatted
+                CACHE["last_count"] = total
+                CACHE["last_success"] = time.time()
+
+                print("[UPDATE]", formatted)
+
         time.sleep(CACHE_TIME)
 
 
+# start background thread
+threading.Thread(target=updater, daemon=True).start()
+
+
 # -----------------------
-# API ROUTE (OFFLINE SAFE)
+# API ROUTE (INSTANT ONLY)
 # -----------------------
 @app.route("/")
 def total_players():
     with LOCK:
-
-        now = time.time()
-        time_since_success = now - CACHE["last_success_time"]
-
-        # -----------------------
-        # OFFLINE MODE
-        # -----------------------
-        if time_since_success > OFFLINE_THRESHOLD:
-            return jsonify({"value": "OFFLINE"})
-
-        return jsonify(CACHE["data"])
-
-
-# START SYSTEM
-initial_fetch()
-threading.Thread(target=background_loop, daemon=True).start()
+        return jsonify({"value": CACHE["value"]})

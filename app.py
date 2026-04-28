@@ -13,12 +13,11 @@ CACHE = {
 }
 
 LOCK = threading.Lock()
-
 CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS (FINAL FIX)
+# FETCH TOTAL PLAYERS
 # -----------------------
 def fetch_total():
     try:
@@ -26,21 +25,18 @@ def fetch_total():
         r.raise_for_status()
         data = r.json()
 
-        servers = data.get("servers") or []
+        servers = data.get("servers", [])
 
         total = 0
 
         for s in servers:
+            # IMPORTANT: raw value only, no filtering
             players = s.get("playerAmount", 0)
 
             try:
-                players = int(players)
+                total += int(players)
             except:
                 continue
-
-            # count ALL valid positive players
-            if players > 0:
-                total += players
 
         return total
 
@@ -50,7 +46,7 @@ def fetch_total():
 
 
 # -----------------------
-# UPDATE CACHE
+# CACHE UPDATE LOOP
 # -----------------------
 def update_cache():
     global CACHE
@@ -78,7 +74,7 @@ threading.Thread(target=background_loop, daemon=True).start()
 
 
 # -----------------------
-# TIME FORMATTER
+# AGE FORMATTER
 # -----------------------
 def format_age(seconds):
     minutes = int(seconds / 60)
@@ -86,7 +82,7 @@ def format_age(seconds):
 
 
 # -----------------------
-# API ENDPOINT
+# ENDPOINT
 # -----------------------
 @app.route("/")
 def total_players():

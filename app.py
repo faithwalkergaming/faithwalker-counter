@@ -10,7 +10,7 @@ API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 CACHE = {
     "timestamp": 0,
     "data": {"count": 0, "trend": "➖"},
-    "last_count": 0
+    "last_count": None
 }
 
 CACHE_TIME = 310
@@ -22,7 +22,7 @@ LOCK = threading.Lock()
 # -----------------------
 def fetch_total():
     try:
-        r = requests.get(API_URL, timeout=3)
+        r = requests.get(API_URL, timeout=5)
         r.raise_for_status()
         servers = r.json().get("servers", [])
 
@@ -49,7 +49,10 @@ def update_cache():
     with LOCK:
         last = CACHE["last_count"]
 
-        if total > last:
+        # first run = no trend yet
+        if last is None:
+            trend = "➖"
+        elif total > last:
             trend = "▲"
         elif total < last:
             trend = "▼"
@@ -61,6 +64,35 @@ def update_cache():
             "trend": trend
         }
 
+        CACHE["last_count"] = total
+        CACHE["timestamp"] = time.time()
+
+        print(f"[UPDATE] {total} {trend}")
+
+
+# -----------------------
+# BACKGROUND LOOP
+# -----------------------
+def background_loop():
+    while True:
+        update_cache()
+        time.sleep(CACHE_TIME)
+
+
+# 🔥 IMPORTANT: run once at startup
+update_cache()
+
+# Start background thread
+threading.Thread(target=background_loop, daemon=True).start()
+
+
+# -----------------------
+# API ROUTE
+# -----------------------
+@app.route("/")
+def total_players():
+    with LOCK:
+        return jsonify(CACHE["data"])
         CACHE["last_count"] = total
         CACHE["timestamp"] = time.time()
 

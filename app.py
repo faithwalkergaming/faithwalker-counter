@@ -8,17 +8,17 @@ app = Flask(__name__)
 API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 
 CACHE = {
-    "value": "0 ➖ (+0)",
-    "last_count": None,
-    "last_success": time.time()
+    "value": "0",
+    "last_success_time": time.time()
 }
 
-LOCK = threading.Lock()
 CACHE_TIME = 310
+OFFLINE_THRESHOLD = 17 * 60  # 17 minutes
+LOCK = threading.Lock()
 
 
 # -----------------------
-# FETCH FUNCTION (SAFE)
+# FETCH FUNCTION
 # -----------------------
 def fetch_total():
     try:
@@ -31,55 +31,77 @@ def fetch_total():
             for s in servers
             if int(s.get("playerAmount", 0)) > 0
         )
-    except:
+    except Exception as e:
+        print("[ERROR] Fetch failed:", e)
         return None
 
 
 # -----------------------
-# BACKGROUND UPDATER
+# UPDATE CACHE
 # -----------------------
-def updater():
+def update_cache():
     global CACHE
 
+    total = fetch_total()
+    now = time.time()
+
+    with LOCK:
+
+        # API failed → keep last value
+        if total is None:
+            print("[WARN] API failed, keeping last value")
+            return False
+
+        # update only raw value
+        CACHE["value"] = str(total)
+        CACHE["last_success_time"] = now
+
+        print("[UPDATE]", total)
+
+    return True
+
+
+# -----------------------
+# INITIAL FETCH
+# -----------------------
+def initial_fetch():
+    print("[INIT] Starting fetch...")
+
+    for _ in range(10):
+        if update_cache():
+            print("[INIT] Success")
+            return
+        time.sleep(2)
+
+    print("[INIT] Failed initial fetch")
+
+
+# -----------------------
+# BACKGROUND LOOP
+# -----------------------
+def background_loop():
     while True:
-        total = fetch_total()
-
-        if total is not None:
-            with LOCK:
-                last = CACHE["last_count"]
-
-                if last is None:
-                    delta = 0
-                    trend = "➖"
-                else:
-                    delta = total - last
-
-                    if delta > 0:
-                        trend = "▲"
-                    elif delta < 0:
-                        trend = "▼"
-                    else:
-                        trend = "➖"
-
-                formatted = f"{total} {trend} ({delta:+d})"
-
-                CACHE["value"] = formatted
-                CACHE["last_count"] = total
-                CACHE["last_success"] = time.time()
-
-                print("[UPDATE]", formatted)
-
+        update_cache()
         time.sleep(CACHE_TIME)
 
 
-# start background thread
-threading.Thread(target=updater, daemon=True).start()
-
-
 # -----------------------
-# API ROUTE (INSTANT ONLY)
+# API ROUTE (OFFLINE SAFE)
 # -----------------------
 @app.route("/")
 def total_players():
     with LOCK:
+
+        now = time.time()
+        time_since_success = now - CACHE["last_success_time"]
+
+        # OFFLINE MODE
+        if time_since_success > OFFLINE_THRESHOLD:
+            return jsonify({"value": "OFFLINE"})
+
         return jsonify({"value": CACHE["value"]})
+
+
+# START SYSTEM
+initial_fetch()
+threading.Thread(target=background_loop, daemon=True).start()

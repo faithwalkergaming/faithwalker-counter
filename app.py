@@ -17,7 +17,7 @@ CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS (FINAL FIX)
+# FETCH TOTAL PLAYERS (WITH RAW DEBUG)
 # -----------------------
 def fetch_total():
     try:
@@ -30,11 +30,13 @@ def fetch_total():
         r.raise_for_status()
         data = r.json()
 
+        # 🔥 RAW DEBUG OUTPUT (THIS IS WHAT YOU NEED IN LOGS)
+        print("RAW API RESPONSE:", data)
+
         servers = data.get("servers")
 
-        # 🚨 CRITICAL: detect broken / empty API response
-        if not isinstance(servers, list) or len(servers) == 0:
-            print("[WARN] API returned empty or invalid server list")
+        if not isinstance(servers, list):
+            print("[WARN] 'servers' missing or invalid")
             return None
 
         total = 0
@@ -63,9 +65,8 @@ def update_cache():
 
     total = fetch_total()
 
-    # 🚨 IMPORTANT: do NOT overwrite good value with bad data
     if total is None:
-        print("[INFO] Keeping last known good value:", CACHE["value"])
+        print("[INFO] Keeping last known value:", CACHE["value"])
         return False
 
     with LOCK:

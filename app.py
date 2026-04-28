@@ -12,13 +12,11 @@ CACHE = {
     "last_success_time": time.time()
 }
 
-CACHE_TIME = 310
-OFFLINE_THRESHOLD = 17 * 60  # 17 minutes
 LOCK = threading.Lock()
 
 
 # -----------------------
-# FETCH FUNCTION
+# FETCH TOTAL PLAYERS
 # -----------------------
 def fetch_total():
     try:
@@ -37,43 +35,23 @@ def fetch_total():
 
 
 # -----------------------
-# UPDATE CACHE
+# UPDATE CACHE (310s loop)
 # -----------------------
 def update_cache():
     global CACHE
 
     total = fetch_total()
-    now = time.time()
+
+    if total is None:
+        return False
 
     with LOCK:
-
-        # API failed → keep last value
-        if total is None:
-            print("[WARN] API failed, keeping last value")
-            return False
-
-        # update only raw value
         CACHE["value"] = str(total)
-        CACHE["last_success_time"] = now
+        CACHE["last_success_time"] = time.time()
 
         print("[UPDATE]", total)
 
     return True
-
-
-# -----------------------
-# INITIAL FETCH
-# -----------------------
-def initial_fetch():
-    print("[INIT] Starting fetch...")
-
-    for _ in range(10):
-        if update_cache():
-            print("[INIT] Success")
-            return
-        time.sleep(2)
-
-    print("[INIT] Failed initial fetch")
 
 
 # -----------------------
@@ -82,26 +60,37 @@ def initial_fetch():
 def background_loop():
     while True:
         update_cache()
-        time.sleep(CACHE_TIME)
+        time.sleep(310)
+
+
+threading.Thread(target=background_loop, daemon=True).start()
 
 
 # -----------------------
-# API ROUTE (OFFLINE SAFE)
+# TIME FORMATTER
+# -----------------------
+def format_age(seconds):
+    minutes = int(seconds / 60)
+
+    if minutes < 60:
+        return f"{minutes}m ago"
+    else:
+        hours = minutes // 60
+        return "1h+ ago"
+
+
+# -----------------------
+# API ROUTE
 # -----------------------
 @app.route("/")
 def total_players():
     with LOCK:
 
         now = time.time()
-        time_since_success = now - CACHE["last_success_time"]
+        age_seconds = now - CACHE["last_success_time"]
 
-        # OFFLINE MODE
-        if time_since_success > OFFLINE_THRESHOLD:
-            return jsonify({"value": "OFFLINE"})
+        age_text = format_age(age_seconds)
 
-        return jsonify({"value": CACHE["value"]})
-
-
-# START SYSTEM
-initial_fetch()
-threading.Thread(target=background_loop, daemon=True).start()
+        return jsonify({
+            "value": f"{CACHE['value']} ({age_text})"
+        })

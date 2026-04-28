@@ -18,7 +18,7 @@ CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS (FINAL FIX)
+# FETCH TOTAL PLAYERS (FINAL RELIABLE VERSION)
 # -----------------------
 def fetch_total():
     try:
@@ -38,7 +38,7 @@ def fetch_total():
             except:
                 continue
 
-            # Count ONLY active players (>0)
+            # COUNT ALL REAL POSITIVE PLAYER VALUES
             if players > 0:
                 total += players
 
@@ -50,7 +50,7 @@ def fetch_total():
 
 
 # -----------------------
-# CACHE UPDATE LOOP
+# BACKGROUND CACHE LOOP
 # -----------------------
 def update_cache():
     global CACHE

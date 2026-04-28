@@ -11,10 +11,12 @@ CACHE = {
     "timestamp": 0,
     "data": {"value": "0"},
     "last_count": None,
-    "last_valid_count": 0
+    "last_valid_count": 0,
+    "last_success_time": time.time()
 }
 
 CACHE_TIME = 310
+OFFLINE_THRESHOLD = 17 * 60  # 17 minutes
 LOCK = threading.Lock()
 
 
@@ -38,47 +40,59 @@ def fetch_total():
 
 
 # -----------------------
-# UPDATE CACHE
+# UPDATE CACHE (with decay + offline logic)
 # -----------------------
 def update_cache():
     global CACHE
 
     total = fetch_total()
+    now = time.time()
 
     with LOCK:
 
-        # ❌ API FAILED → DO NOTHING (keep last value)
+        # -----------------------
+        # API FAILED
+        # -----------------------
         if total is None:
-            print("[WARN] Using last known value:", CACHE["last_valid_count"])
+            print("[WARN] API failed, keeping last value")
             return False
+
+        # mark successful fetch time
+        CACHE["last_success_time"] = now
 
         last = CACHE["last_count"]
 
-        # Determine trend + delta
+        # -----------------------
+        # DECAY LOGIC (smooth trend)
+        # -----------------------
         if last is None:
-            trend = "➖"
             delta = 0
+            trend = "➖"
+
         else:
             delta = total - last
 
-            if delta > 0:
-                trend = "▲"
-            elif delta < 0:
-                trend = "▼"
-            else:
+            # decay smoothing: ignore tiny fluctuations (-1 to +1)
+            if -1 <= delta <= 1:
                 trend = "➖"
+                delta = 0
+            elif delta > 1:
+                trend = "▲"
+            else:
+                trend = "▼"
 
-        # Build output
+        # -----------------------
+        # FORMAT OUTPUT
+        # -----------------------
         if total == 0:
             formatted = "0"
         else:
             formatted = f"{total} {trend} ({delta:+d})"
 
-        # Save state
         CACHE["data"] = {"value": formatted}
         CACHE["last_count"] = total
         CACHE["last_valid_count"] = total
-        CACHE["timestamp"] = time.time()
+        CACHE["timestamp"] = now
 
         print(f"[UPDATE] {formatted}")
 
@@ -86,10 +100,10 @@ def update_cache():
 
 
 # -----------------------
-# INITIAL FETCH (safe startup)
+# INITIAL FETCH
 # -----------------------
 def initial_fetch():
-    print("[INIT] Fetching initial data...")
+    print("[INIT] Starting fetch...")
 
     for _ in range(10):
         if update_cache():
@@ -97,7 +111,7 @@ def initial_fetch():
             return
         time.sleep(2)
 
-    print("[INIT] Using fallback state")
+    print("[INIT] Failed initial fetch")
 
 
 # -----------------------
@@ -109,15 +123,25 @@ def background_loop():
         time.sleep(CACHE_TIME)
 
 
-# Start system
-initial_fetch()
-threading.Thread(target=background_loop, daemon=True).start()
-
-
 # -----------------------
-# API ROUTE
+# API ROUTE (OFFLINE SAFE)
 # -----------------------
 @app.route("/")
 def total_players():
     with LOCK:
+
+        now = time.time()
+        time_since_success = now - CACHE["last_success_time"]
+
+        # -----------------------
+        # OFFLINE MODE
+        # -----------------------
+        if time_since_success > OFFLINE_THRESHOLD:
+            return jsonify({"value": "OFFLINE"})
+
         return jsonify(CACHE["data"])
+
+
+# START SYSTEM
+initial_fetch()
+threading.Thread(target=background_loop, daemon=True).start()

@@ -26,13 +26,11 @@ def fetch_total():
         r.raise_for_status()
         servers = r.json().get("servers", [])
 
-        total = sum(
+        return sum(
             int(s.get("playerAmount", 0))
             for s in servers
             if int(s.get("playerAmount", 0)) > 0
         )
-
-        return total
 
     except Exception as e:
         print("[ERROR] Fetch failed:", e)
@@ -47,7 +45,7 @@ def update_cache():
 
     total = fetch_total()
     if total is None:
-        return
+        return False
 
     with LOCK:
         last = CACHE["last_count"]
@@ -71,6 +69,24 @@ def update_cache():
 
         print(f"[UPDATE] {total} {trend}")
 
+    return True
+
+
+# -----------------------
+# STARTUP RETRY LOOP
+# -----------------------
+def initial_fetch():
+    print("[INIT] Fetching initial data...")
+
+    for _ in range(10):  # try up to 10 times
+        success = update_cache()
+        if success:
+            print("[INIT] Success")
+            return
+        time.sleep(2)
+
+    print("[INIT] Failed to fetch initial data after retries")
+
 
 # -----------------------
 # BACKGROUND LOOP
@@ -81,16 +97,15 @@ def background_loop():
         time.sleep(CACHE_TIME)
 
 
-# -----------------------
-# STARTUP INIT
-# -----------------------
-update_cache()  # run once immediately
+# 🔥 Run initial fetch with retries
+initial_fetch()
 
+# Start background updates
 threading.Thread(target=background_loop, daemon=True).start()
 
 
 # -----------------------
-# API ROUTE (ONLY ONE)
+# API ROUTE
 # -----------------------
 @app.route("/")
 def total_players():

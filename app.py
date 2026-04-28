@@ -9,7 +9,7 @@ API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 
 CACHE = {
     "timestamp": 0,
-    "data": {"count": 0, "trend": "➖"},
+    "data": {"value": "0 ➖ (+0)"},
     "last_count": None
 }
 
@@ -18,7 +18,7 @@ LOCK = threading.Lock()
 
 
 # -----------------------
-# FETCH FUNCTION
+# FETCH TOTAL PLAYERS
 # -----------------------
 def fetch_total():
     try:
@@ -31,7 +31,6 @@ def fetch_total():
             for s in servers
             if int(s.get("playerAmount", 0)) > 0
         )
-
     except Exception as e:
         print("[ERROR] Fetch failed:", e)
         return None
@@ -50,42 +49,45 @@ def update_cache():
     with LOCK:
         last = CACHE["last_count"]
 
+        # Determine trend
         if last is None:
             trend = "➖"
-        elif total > last:
-            trend = "▲"
-        elif total < last:
-            trend = "▼"
+            delta = 0
         else:
-            trend = "➖"
+            delta = total - last
 
-        CACHE["data"] = {
-            "count": total,
-            "trend": trend
-        }
+            if delta > 0:
+                trend = "▲"
+            elif delta < 0:
+                trend = "▼"
+            else:
+                trend = "➖"
 
+        # Format final output string
+        formatted = f"{total} {trend} ({delta:+d})"
+
+        CACHE["data"] = {"value": formatted}
         CACHE["last_count"] = total
         CACHE["timestamp"] = time.time()
 
-        print(f"[UPDATE] {total} {trend}")
+        print(f"[UPDATE] {formatted}")
 
     return True
 
 
 # -----------------------
-# STARTUP RETRY LOOP
+# INITIAL SAFE FETCH
 # -----------------------
 def initial_fetch():
     print("[INIT] Fetching initial data...")
 
-    for _ in range(10):  # try up to 10 times
-        success = update_cache()
-        if success:
+    for _ in range(10):
+        if update_cache():
             print("[INIT] Success")
             return
         time.sleep(2)
 
-    print("[INIT] Failed to fetch initial data after retries")
+    print("[INIT] Failed initial fetch")
 
 
 # -----------------------
@@ -97,15 +99,13 @@ def background_loop():
         time.sleep(CACHE_TIME)
 
 
-# 🔥 Run initial fetch with retries
+# Start system
 initial_fetch()
-
-# Start background updates
 threading.Thread(target=background_loop, daemon=True).start()
 
 
 # -----------------------
-# API ROUTE
+# API ROUTE (SINGLE FIELD OUTPUT)
 # -----------------------
 @app.route("/")
 def total_players():

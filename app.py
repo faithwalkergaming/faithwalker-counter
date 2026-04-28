@@ -1,114 +1,30 @@
 from flask import Flask, jsonify
 import requests
-import time
-import threading
 
 app = Flask(__name__)
 
 API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 
-CACHE = {
-    "value": "0",
-    "last_success_time": time.time()
-}
 
-LOCK = threading.Lock()
-CACHE_TIME = 310
-
-
-# -----------------------
-# FETCH TOTAL PLAYERS (WITH RAW DEBUG)
-# -----------------------
-def fetch_total():
+@app.route("/")
+def total_players():
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json"
-        }
-
-        r = requests.get(API_URL, headers=headers, timeout=10)
-        r.raise_for_status()
+        r = requests.get(API_URL, timeout=10)
         data = r.json()
 
-        # 🔥 RAW DEBUG OUTPUT (THIS IS WHAT YOU NEED IN LOGS)
-        print("RAW API RESPONSE:", data)
-
-        servers = data.get("servers")
-
-        if not isinstance(servers, list):
-            print("[WARN] 'servers' missing or invalid")
-            return None
+        servers = data.get("servers", [])
 
         total = 0
 
         for s in servers:
-            players = s.get("playerAmount")
+            players = s.get("playerAmount", 0)
 
             try:
-                if players is not None:
-                    total += int(players)
+                total += int(players)
             except:
-                continue
+                pass
 
-        return total
+        return jsonify({"value": total})
 
     except Exception as e:
-        print("[ERROR] Fetch failed:", e)
-        return None
-
-
-# -----------------------
-# CACHE UPDATE LOOP
-# -----------------------
-def update_cache():
-    global CACHE
-
-    total = fetch_total()
-
-    if total is None:
-        print("[INFO] Keeping last known value:", CACHE["value"])
-        return False
-
-    with LOCK:
-        CACHE["value"] = str(total)
-        CACHE["last_success_time"] = time.time()
-        print("[UPDATE]", total)
-
-    return True
-
-
-def background_loop():
-    while True:
-        update_cache()
-        time.sleep(CACHE_TIME)
-
-
-threading.Thread(target=background_loop, daemon=True).start()
-
-
-# -----------------------
-# TIME FORMATTER
-# -----------------------
-def format_age(seconds):
-    minutes = int(seconds / 60)
-    return f"{minutes}m ago" if minutes < 60 else "1h+ ago"
-
-
-# -----------------------
-# API ENDPOINT
-# -----------------------
-@app.route("/")
-def total_players():
-    with LOCK:
-        now = time.time()
-        age_seconds = now - CACHE["last_success_time"]
-        age_minutes = int(age_seconds / 60)
-
-        value = CACHE["value"]
-
-        if age_minutes >= 17:
-            return jsonify({
-                "value": f"{value} ({format_age(age_seconds)})"
-            })
-
-        return jsonify({"value": value})
+        return jsonify({"value": "ERROR", "debug": str(e)})

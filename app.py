@@ -18,31 +18,31 @@ CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS (ROBUST)
+# FETCH TOTAL PLAYERS (FINAL LOGIC)
 # -----------------------
 def fetch_total():
     try:
-        r = requests.get(API_URL, timeout=5)
+        r = requests.get(API_URL, timeout=10)
         r.raise_for_status()
         data = r.json()
 
-        servers = data.get("servers") or data.get("data", {}).get("servers") or []
+        servers = data.get("servers") or []
 
         total = 0
 
         for s in servers:
-            players = (
-                s.get("playerAmount")
-                or s.get("players")
-                or s.get("onlinePlayers")
-                or s.get("playerCount")
-                or 0
-            )
+
+            prefix = (s.get("prefix") or "").lower()
+            players = s.get("playerAmount") or 0
 
             try:
-                total += int(players)
+                players = int(players)
             except:
                 continue
+
+            # ONLY count real FaithWalker active servers
+            if "faithwalker" in prefix and players > 0:
+                total += players
 
         return total
 
@@ -52,7 +52,7 @@ def fetch_total():
 
 
 # -----------------------
-# UPDATE CACHE
+# UPDATE CACHE LOOP
 # -----------------------
 def update_cache():
     global CACHE
@@ -71,9 +71,6 @@ def update_cache():
     return True
 
 
-# -----------------------
-# BACKGROUND LOOP
-# -----------------------
 def background_loop():
     while True:
         update_cache()
@@ -96,7 +93,7 @@ def format_age(seconds):
 
 
 # -----------------------
-# API ROUTE (MEMBER COUNTER)
+# API ENDPOINT (MEMBER COUNTER)
 # -----------------------
 @app.route("/")
 def total_players():
@@ -104,9 +101,13 @@ def total_players():
 
         now = time.time()
         age_seconds = now - CACHE["last_success_time"]
+        age_minutes = int(age_seconds / 60)
 
-        age_text = format_age(age_seconds)
+        value = CACHE["value"]
 
-        return jsonify({
-            "value": f"{CACHE['value']} ({age_text})"
-        })
+        # Only show age after 17 minutes
+        if age_minutes >= 17:
+            age_text = format_age(age_seconds)
+            return jsonify({"value": f"{value} ({age_text})"})
+
+        return jsonify({"value": value})

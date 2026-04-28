@@ -9,8 +9,9 @@ API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
 
 CACHE = {
     "timestamp": 0,
-    "data": {"value": "0 ➖ (+0)"},
-    "last_count": None
+    "data": {"value": "0"},
+    "last_count": None,
+    "last_valid_count": 0
 }
 
 CACHE_TIME = 310
@@ -18,7 +19,7 @@ LOCK = threading.Lock()
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS
+# FETCH FUNCTION
 # -----------------------
 def fetch_total():
     try:
@@ -43,13 +44,17 @@ def update_cache():
     global CACHE
 
     total = fetch_total()
-    if total is None:
-        return False
 
     with LOCK:
+
+        # ❌ API FAILED → DO NOTHING (keep last value)
+        if total is None:
+            print("[WARN] Using last known value:", CACHE["last_valid_count"])
+            return False
+
         last = CACHE["last_count"]
 
-        # Determine trend
+        # Determine trend + delta
         if last is None:
             trend = "➖"
             delta = 0
@@ -63,11 +68,16 @@ def update_cache():
             else:
                 trend = "➖"
 
-        # Format final output string
-        formatted = f"{total} {trend} ({delta:+d})"
+        # Build output
+        if total == 0:
+            formatted = "0"
+        else:
+            formatted = f"{total} {trend} ({delta:+d})"
 
+        # Save state
         CACHE["data"] = {"value": formatted}
         CACHE["last_count"] = total
+        CACHE["last_valid_count"] = total
         CACHE["timestamp"] = time.time()
 
         print(f"[UPDATE] {formatted}")
@@ -76,7 +86,7 @@ def update_cache():
 
 
 # -----------------------
-# INITIAL SAFE FETCH
+# INITIAL FETCH (safe startup)
 # -----------------------
 def initial_fetch():
     print("[INIT] Fetching initial data...")
@@ -87,7 +97,7 @@ def initial_fetch():
             return
         time.sleep(2)
 
-    print("[INIT] Failed initial fetch")
+    print("[INIT] Using fallback state")
 
 
 # -----------------------
@@ -105,7 +115,7 @@ threading.Thread(target=background_loop, daemon=True).start()
 
 
 # -----------------------
-# API ROUTE (SINGLE FIELD OUTPUT)
+# API ROUTE
 # -----------------------
 @app.route("/")
 def total_players():

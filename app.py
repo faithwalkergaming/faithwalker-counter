@@ -18,7 +18,7 @@ CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS (FINAL LOGIC)
+# FETCH TOTAL PLAYERS (FINAL FIX)
 # -----------------------
 def fetch_total():
     try:
@@ -31,17 +31,15 @@ def fetch_total():
         total = 0
 
         for s in servers:
-
-            prefix = (s.get("prefix") or "").lower()
-            players = s.get("playerAmount") or 0
+            players = s.get("playerAmount", 0)
 
             try:
                 players = int(players)
             except:
                 continue
 
-            # ONLY count real FaithWalker active servers
-            if "faithwalker" in prefix and players > 0:
+            # Count ONLY active players (>0)
+            if players > 0:
                 total += players
 
         return total
@@ -52,7 +50,7 @@ def fetch_total():
 
 
 # -----------------------
-# UPDATE CACHE LOOP
+# CACHE UPDATE LOOP
 # -----------------------
 def update_cache():
     global CACHE
@@ -107,7 +105,8 @@ def total_players():
 
         # Only show age after 17 minutes
         if age_minutes >= 17:
-            age_text = format_age(age_seconds)
-            return jsonify({"value": f"{value} ({age_text})"})
+            return jsonify({
+                "value": f"{value} ({format_age(age_seconds)})"
+            })
 
         return jsonify({"value": value})

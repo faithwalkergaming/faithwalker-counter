@@ -14,28 +14,45 @@ CACHE = {
 
 LOCK = threading.Lock()
 
+CACHE_TIME = 310
+
 
 # -----------------------
-# FETCH TOTAL PLAYERS
+# FETCH TOTAL PLAYERS (ROBUST)
 # -----------------------
 def fetch_total():
     try:
         r = requests.get(API_URL, timeout=5)
         r.raise_for_status()
-        servers = r.json().get("servers", [])
+        data = r.json()
 
-        return sum(
-            int(s.get("playerAmount", 0))
-            for s in servers
-            if int(s.get("playerAmount", 0)) > 0
-        )
+        servers = data.get("servers") or data.get("data", {}).get("servers") or []
+
+        total = 0
+
+        for s in servers:
+            players = (
+                s.get("playerAmount")
+                or s.get("players")
+                or s.get("onlinePlayers")
+                or s.get("playerCount")
+                or 0
+            )
+
+            try:
+                total += int(players)
+            except:
+                continue
+
+        return total
+
     except Exception as e:
         print("[ERROR] Fetch failed:", e)
         return None
 
 
 # -----------------------
-# UPDATE CACHE (310s loop)
+# UPDATE CACHE
 # -----------------------
 def update_cache():
     global CACHE
@@ -60,7 +77,7 @@ def update_cache():
 def background_loop():
     while True:
         update_cache()
-        time.sleep(310)
+        time.sleep(CACHE_TIME)
 
 
 threading.Thread(target=background_loop, daemon=True).start()
@@ -75,12 +92,11 @@ def format_age(seconds):
     if minutes < 60:
         return f"{minutes}m ago"
     else:
-        hours = minutes // 60
         return "1h+ ago"
 
 
 # -----------------------
-# API ROUTE
+# API ROUTE (MEMBER COUNTER)
 # -----------------------
 @app.route("/")
 def total_players():

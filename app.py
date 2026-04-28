@@ -18,7 +18,7 @@ CACHE_TIME = 310
 
 
 # -----------------------
-# FETCH TOTAL PLAYERS (FINAL RELIABLE VERSION)
+# FETCH TOTAL PLAYERS (FINAL FIX)
 # -----------------------
 def fetch_total():
     try:
@@ -38,7 +38,7 @@ def fetch_total():
             except:
                 continue
 
-            # COUNT ALL REAL POSITIVE PLAYER VALUES
+            # count ALL valid positive players
             if players > 0:
                 total += players
 
@@ -50,7 +50,7 @@ def fetch_total():
 
 
 # -----------------------
-# BACKGROUND CACHE LOOP
+# UPDATE CACHE
 # -----------------------
 def update_cache():
     global CACHE
@@ -63,7 +63,6 @@ def update_cache():
     with LOCK:
         CACHE["value"] = str(total)
         CACHE["last_success_time"] = time.time()
-
         print("[UPDATE]", total)
 
     return True
@@ -83,27 +82,21 @@ threading.Thread(target=background_loop, daemon=True).start()
 # -----------------------
 def format_age(seconds):
     minutes = int(seconds / 60)
-
-    if minutes < 60:
-        return f"{minutes}m ago"
-    else:
-        return "1h+ ago"
+    return f"{minutes}m ago" if minutes < 60 else "1h+ ago"
 
 
 # -----------------------
-# API ENDPOINT (MEMBER COUNTER)
+# API ENDPOINT
 # -----------------------
 @app.route("/")
 def total_players():
     with LOCK:
-
         now = time.time()
         age_seconds = now - CACHE["last_success_time"]
         age_minutes = int(age_seconds / 60)
 
         value = CACHE["value"]
 
-        # Only show age after 17 minutes
         if age_minutes >= 17:
             return jsonify({
                 "value": f"{value} ({format_age(age_seconds)})"

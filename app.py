@@ -4,7 +4,7 @@ import time
 
 app = Flask(__name__)
 
-API_URL = "https://api.gametools.network/bf6/servers/?name=faithwalker&limit=50"
+API_URL = "https://api.gametools.network/bf6/servers/?name=faith&limit=50"
 
 CACHE = {
     "value": 0,

@@ -7,7 +7,7 @@ app = Flask(__name__)
 API_URL = "https://api.gametools.network/bf6/servers/?name=faith&limit=50"
 
 CACHE = {
-    "value": None,          # no fake 0 on startup
+    "value": None,
     "last_update": 0
 }
 
@@ -35,13 +35,24 @@ def fetch_total():
 
             servers = data.get("servers", [])
 
+            print("SERVERS FOUND:", len(servers))
+
             total = 0
 
             for s in servers:
 
+                print("SERVER:", s)
+
                 try:
-                    total += int(s.get("playerAmount", 0))
+
+                    player_count = int(s.get("playerAmount", 0))
+
+                    print("PLAYER COUNT:", player_count)
+
+                    total += player_count
+
                 except Exception as e:
+
                     print("PARSE ERROR:", e)
 
             print("TOTAL PLAYERS:", total)
@@ -77,6 +88,8 @@ def get_cached_value():
             CACHE["value"] = new_value
             CACHE["last_update"] = now
 
+            print("CACHE UPDATED:", CACHE)
+
         except Exception as e:
 
             print("CACHE UPDATE ERROR:", e)
@@ -88,7 +101,7 @@ def get_cached_value():
 
 
 # -----------------------
-# ROUTE
+# MAIN ROUTE
 # -----------------------
 @app.route("/")
 def total_players():
@@ -103,7 +116,50 @@ def total_players():
 
 
 # -----------------------
+# DEBUG ROUTE
+# -----------------------
+@app.route("/debug")
+def debug():
+
+    try:
+
+        r = requests.get(API_URL, timeout=15)
+
+        return jsonify({
+            "status_code": r.status_code,
+            "raw_response": r.json()
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        })
+
+
+# -----------------------
+# CACHE DEBUG ROUTE
+# -----------------------
+@app.route("/cache")
+def cache_debug():
+
+    return jsonify(CACHE)
+
+
+# -----------------------
+# HEALTHCHECK
+# -----------------------
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "online"
+    })
+
+
+# -----------------------
 # RUN
 # -----------------------
 if __name__ == "__main__":
+
     app.run(host="0.0.0.0", port=10000)

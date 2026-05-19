@@ -11,7 +11,7 @@ CACHE = {
     "last_update": 0
 }
 
-CACHE_TIME = 310  # seconds
+CACHE_TIME = 330  # seconds
 
 
 # -----------------------
@@ -37,8 +37,7 @@ def fetch_total():
 
             print("SERVERS FOUND:", len(servers))
 
-            # IMPORTANT:
-            # Do NOT overwrite cache with empty API results
+            # Prevent wiping cache with empty API results
             if len(servers) == 0:
                 raise Exception("No servers returned from API")
 
@@ -87,7 +86,7 @@ def get_cached_value():
 
             new_value = fetch_total()
 
-            # only overwrite cache on successful valid fetch
+            # Only overwrite cache on successful valid fetch
             CACHE["value"] = new_value
             CACHE["last_update"] = now
 
@@ -97,7 +96,7 @@ def get_cached_value():
 
             print("CACHE UPDATE ERROR:", e)
 
-            # KEEP last known good value
+            # Keep last known good value
             pass
 
     return CACHE["value"]
@@ -111,42 +110,11 @@ def total_players():
 
     value = get_cached_value()
 
-    # startup state if API unavailable
+    # Startup state if API unavailable
     if value is None:
         return jsonify({"value": "updating"})
 
     return jsonify({"value": value})
-
-
-# -----------------------
-# DEBUG ROUTE
-# -----------------------
-@app.route("/debug")
-def debug():
-
-    try:
-
-        r = requests.get(API_URL, timeout=15)
-
-        return jsonify({
-            "status_code": r.status_code,
-            "raw_response": r.json()
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            "error": str(e)
-        })
-
-
-# -----------------------
-# CACHE DEBUG ROUTE
-# -----------------------
-@app.route("/cache")
-def cache_debug():
-
-    return jsonify(CACHE)
 
 
 # -----------------------
@@ -161,8 +129,38 @@ def health():
 
 
 # -----------------------
+# CACHE DEBUG ROUTE
+# -----------------------
+@app.route("/cache")
+def cache():
+
+    return jsonify(CACHE)
+
+
+# -----------------------
+# DEBUG ROUTE
+# -----------------------
+@app.route("/debug")
+def debug():
+
+    try:
+
+        r = requests.get(API_URL, timeout=15)
+
+        return jsonify({
+            "status_code": r.status_code,
+            "response": r.json()
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        })
+
+
+# -----------------------
 # RUN
 # -----------------------
 if __name__ == "__main__":
-
-    app.run(host="0.0.0.0", port=10000)
+    app.run()

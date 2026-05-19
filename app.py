@@ -7,11 +7,11 @@ app = Flask(__name__)
 API_URL = "https://api.gametools.network/bf6/servers/?name=faith&limit=50"
 
 CACHE = {
-    "value": None,
+    "value": 0,
     "last_update": 0
 }
 
-CACHE_TIME = 330  # seconds
+CACHE_TIME = 310  # seconds
 
 
 # -----------------------
@@ -36,9 +36,9 @@ def fetch_total():
 
             print("SERVERS FOUND:", len(servers))
 
-            # If API returns empty, treat as failure (do NOT overwrite cache)
+            # If API is empty, treat as failure (DO NOT overwrite cache)
             if not servers:
-                raise Exception("Empty server list returned")
+                raise Exception("Empty server list")
 
             total = 0
 
@@ -56,25 +56,25 @@ def fetch_total():
             print("FETCH ERROR:", e)
             time.sleep(2)
 
+    # If everything fails, do NOT crash
     raise Exception("API failed after retries")
 
 
 # -----------------------
-# CACHE HANDLING
+# CACHE LOGIC
 # -----------------------
 def get_cached_value():
 
     now = time.time()
 
     if (
-        CACHE["value"] is None or
         now - CACHE["last_update"] > CACHE_TIME
     ):
 
         try:
             new_value = fetch_total()
 
-            # only update cache if fetch succeeded
+            # Only update cache if valid
             CACHE["value"] = new_value
             CACHE["last_update"] = now
 
@@ -82,7 +82,7 @@ def get_cached_value():
 
         except Exception as e:
             print("CACHE UPDATE ERROR:", e)
-            # keep last good value (do nothing)
+            # Keep last known good value
 
     return CACHE["value"]
 
@@ -93,13 +93,20 @@ def get_cached_value():
 @app.route("/")
 def total_players():
 
-    value = get_cached_value()
+    try:
+        value = get_cached_value()
 
-    # IMPORTANT: always return an integer for Discord compatibility
-    if value is None:
-        value = 0
+        # HARD GUARANTEE: always return integer
+        if value is None:
+            value = 0
 
-    return jsonify({"value": int(value)})
+        return jsonify({"value": int(value)})
+
+    except Exception as e:
+        print("ROUTE ERROR:", e)
+
+        # NEVER break Discord template
+        return jsonify({"value": 0})
 
 
 # -----------------------
@@ -115,13 +122,9 @@ def health():
 # -----------------------
 @app.route("/debug")
 def debug():
-
     try:
         r = requests.get(API_URL, timeout=15)
-        return jsonify({
-            "status_code": r.status_code,
-            "response": r.json()
-        })
+        return jsonify(r.json())
     except Exception as e:
         return jsonify({"error": str(e)})
 

@@ -22,7 +22,6 @@ def fetch_total():
     for attempt in range(3):
 
         try:
-
             print(f"Fetching API (attempt {attempt + 1})")
 
             r = requests.get(API_URL, timeout=15)
@@ -37,24 +36,16 @@ def fetch_total():
 
             print("SERVERS FOUND:", len(servers))
 
-            # Prevent wiping cache with empty API results
-            if len(servers) == 0:
-                raise Exception("No servers returned from API")
+            # If API returns empty, treat as failure (do NOT overwrite cache)
+            if not servers:
+                raise Exception("Empty server list returned")
 
             total = 0
 
             for s in servers:
-
                 try:
-
-                    player_count = int(s.get("playerAmount", 0))
-
-                    print("PLAYER COUNT:", player_count)
-
-                    total += player_count
-
+                    total += int(s.get("playerAmount", 0))
                 except Exception as e:
-
                     print("PARSE ERROR:", e)
 
             print("TOTAL PLAYERS:", total)
@@ -62,16 +53,14 @@ def fetch_total():
             return total
 
         except Exception as e:
-
             print("FETCH ERROR:", e)
-
             time.sleep(2)
 
-    raise Exception("API failed after 3 retries")
+    raise Exception("API failed after retries")
 
 
 # -----------------------
-# UPDATE CACHE IF NEEDED
+# CACHE HANDLING
 # -----------------------
 def get_cached_value():
 
@@ -83,84 +72,59 @@ def get_cached_value():
     ):
 
         try:
-
             new_value = fetch_total()
 
-            # Only overwrite cache on successful valid fetch
+            # only update cache if fetch succeeded
             CACHE["value"] = new_value
             CACHE["last_update"] = now
 
             print("CACHE UPDATED:", CACHE)
 
         except Exception as e:
-
             print("CACHE UPDATE ERROR:", e)
-
-            # Keep last known good value
-            pass
+            # keep last good value (do nothing)
 
     return CACHE["value"]
 
 
 # -----------------------
-# MAIN ROUTE
+# MAIN ENDPOINT (DISCORD SAFE)
 # -----------------------
 @app.route("/")
 def total_players():
 
     value = get_cached_value()
 
-    # Startup state if API unavailable
+    # IMPORTANT: always return an integer for Discord compatibility
     if value is None:
-        return jsonify({"value": "updating"})
+        value = 0
 
-    return jsonify({"value": value})
+    return jsonify({"value": int(value)})
 
 
 # -----------------------
-# HEALTHCHECK
+# HEALTH CHECK
 # -----------------------
 @app.route("/health")
 def health():
-
-    return jsonify({
-        "status": "online"
-    })
+    return jsonify({"status": "online"})
 
 
 # -----------------------
-# CACHE DEBUG ROUTE
-# -----------------------
-@app.route("/cache")
-def cache():
-
-    return jsonify(CACHE)
-
-
-# -----------------------
-# DEBUG ROUTE
+# DEBUG (optional)
 # -----------------------
 @app.route("/debug")
 def debug():
 
     try:
-
         r = requests.get(API_URL, timeout=15)
-
         return jsonify({
             "status_code": r.status_code,
             "response": r.json()
         })
-
     except Exception as e:
-
-        return jsonify({
-            "error": str(e)
-        })
+        return jsonify({"error": str(e)})
 
 
-# -----------------------
-# RUN
-# -----------------------
 if __name__ == "__main__":
     app.run()

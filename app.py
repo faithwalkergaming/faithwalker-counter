@@ -37,11 +37,14 @@ def fetch_total():
 
             print("SERVERS FOUND:", len(servers))
 
+            # IMPORTANT:
+            # Do NOT overwrite cache with empty API results
+            if len(servers) == 0:
+                raise Exception("No servers returned from API")
+
             total = 0
 
             for s in servers:
-
-                print("SERVER:", s)
 
                 try:
 
@@ -84,7 +87,7 @@ def get_cached_value():
 
             new_value = fetch_total()
 
-            # only overwrite cache on success
+            # only overwrite cache on successful valid fetch
             CACHE["value"] = new_value
             CACHE["last_update"] = now
 
@@ -94,7 +97,7 @@ def get_cached_value():
 
             print("CACHE UPDATE ERROR:", e)
 
-            # keep last known good value
+            # KEEP last known good value
             pass
 
     return CACHE["value"]
@@ -108,7 +111,7 @@ def total_players():
 
     value = get_cached_value()
 
-    # first startup and API unavailable
+    # startup state if API unavailable
     if value is None:
         return jsonify({"value": "updating"})
 

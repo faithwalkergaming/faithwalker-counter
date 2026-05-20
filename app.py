@@ -25,6 +25,7 @@ requests_session = requests.Session()
 def safe_json(value):
     """
     ALWAYS return valid JSON with a value field.
+    Value is returned as a STRING for maximum compatibility.
     """
 
     try:
@@ -33,7 +34,7 @@ def safe_json(value):
         value = 0
 
     return Response(
-        json.dumps({"value": value}),
+        json.dumps({"value": str(value)}),
         status=200,
         mimetype="application/json"
     )

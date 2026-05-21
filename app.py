@@ -25,6 +25,11 @@ CACHE_TIME = 60
 # -----------------------
 requests_session = requests.Session()
 
+# Custom User-Agent for stability
+requests_session.headers.update({
+    "User-Agent": "FaithWalkerCounter/1.0"
+})
+
 retry_strategy = Retry(
     total=5,
     backoff_factor=1,

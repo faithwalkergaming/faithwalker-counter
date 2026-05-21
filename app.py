@@ -3,6 +3,7 @@ import requests
 import json
 import time
 import os
+import threading
 
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -13,25 +14,23 @@ API_URL = "https://api.gametools.network/bf6/servers/?name=faith&limit=50"
 
 CACHE = {
     "value": 0,
-    "last_update": 0
+    "last_update": 0,
+    "updating": False
 }
 
-# Refresh cache every 60 seconds
 CACHE_TIME = 60
 
-
 # -----------------------
-# REQUEST SESSION + RETRIES
+# REQUEST SESSION
 # -----------------------
 requests_session = requests.Session()
 
-# Custom User-Agent for stability
 requests_session.headers.update({
     "User-Agent": "FaithWalkerCounter/1.0"
 })
 
 retry_strategy = Retry(
-    total=5,
+    total=3,
     backoff_factor=1,
     status_forcelist=[429, 500, 502, 503, 504],
 )
@@ -46,14 +45,10 @@ requests_session.mount("http://", adapter)
 # SAFE JSON RESPONSE
 # -----------------------
 def safe_json(value):
-    """
-    ALWAYS return valid JSON with a value field.
-    Value is returned as STRING for maximum compatibility.
-    """
 
     try:
         value = int(value)
-    except Exception:
+    except:
         value = 0
 
     return Response(
@@ -68,85 +63,75 @@ def safe_json(value):
 # -----------------------
 def fetch_total():
 
-    for attempt in range(3):
+    print("FETCHING API")
 
-        try:
+    r = requests_session.get(API_URL, timeout=10)
 
-            print(f"Fetching API (attempt {attempt + 1})")
+    print("STATUS:", r.status_code)
 
-            r = requests_session.get(API_URL, timeout=15)
+    r.raise_for_status()
 
-            print("STATUS:", r.status_code)
+    data = r.json()
 
-            r.raise_for_status()
+    servers = data.get("servers", [])
 
-            # Safely parse JSON
-            try:
-                data = r.json()
+    if not servers:
+        raise Exception("Empty server list")
 
-            except Exception:
+    total = 0
 
-                print("INVALID JSON RESPONSE")
-                print(r.text[:500])
+    for s in servers:
+        total += int(s.get("playerAmount", 0))
 
-                raise Exception("Bad JSON from API")
+    print("TOTAL:", total)
 
-            servers = data.get("servers", [])
-
-            print("SERVERS FOUND:", len(servers))
-
-            # Empty list = failure
-            if not servers:
-                raise Exception("Empty server list")
-
-            total = 0
-
-            for s in servers:
-
-                try:
-                    total += int(s.get("playerAmount", 0))
-
-                except Exception as e:
-                    print("PARSE ERROR:", e)
-
-            print("TOTAL PLAYERS:", total)
-
-            return total
-
-        except Exception as e:
-
-            print("FETCH ERROR:", e)
-
-            time.sleep(2)
-
-    raise Exception("API failed after retries")
+    return total
 
 
 # -----------------------
-# CACHE LOGIC
+# BACKGROUND CACHE UPDATE
 # -----------------------
-def get_cached_value():
+def update_cache():
+
+    if CACHE["updating"]:
+        return
+
+    CACHE["updating"] = True
+
+    try:
+
+        new_value = fetch_total()
+
+        CACHE["value"] = new_value
+        CACHE["last_update"] = time.time()
+
+        print("CACHE UPDATED:", CACHE)
+
+    except Exception as e:
+
+        print("CACHE UPDATE ERROR:", e)
+
+    finally:
+
+        CACHE["updating"] = False
+
+
+# -----------------------
+# GET VALUE
+# -----------------------
+def get_value():
 
     now = time.time()
 
-    # Refresh cache if expired
+    # Trigger background refresh if cache expired
     if now - CACHE["last_update"] > CACHE_TIME:
 
-        try:
+        threading.Thread(
+            target=update_cache,
+            daemon=True
+        ).start()
 
-            new_value = fetch_total()
-
-            CACHE["value"] = int(new_value)
-            CACHE["last_update"] = now
-
-            print("CACHE UPDATED:", CACHE)
-
-        except Exception as e:
-
-            print("CACHE UPDATE ERROR:", e)
-
-            # Keep last known good value
-
+    # ALWAYS instantly return cached value
     return CACHE["value"]
 
 
@@ -158,9 +143,7 @@ def total_players():
 
     try:
 
-        value = get_cached_value()
-
-        return safe_json(value)
+        return safe_json(get_value())
 
     except Exception as e:
 
@@ -179,26 +162,16 @@ def health():
 
 
 # -----------------------
-# DEBUG ENDPOINT
+# DEBUG
 # -----------------------
 @app.route("/debug")
 def debug():
 
-    try:
-
-        r = requests_session.get(API_URL, timeout=15)
-
-        return Response(
-            r.text,
-            status=200,
-            mimetype="application/json"
-        )
-
-    except Exception as e:
-
-        print("DEBUG ERROR:", e)
-
-        return safe_json(0)
+    return Response(
+        json.dumps(CACHE),
+        status=200,
+        mimetype="application/json"
+    )
 
 
 # -----------------------

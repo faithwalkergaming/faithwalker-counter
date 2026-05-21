@@ -4,6 +4,9 @@ import json
 import time
 import os
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 app = Flask(__name__)
 
 API_URL = "https://api.gametools.network/bf6/servers/?name=faith&limit=50"
@@ -13,10 +16,25 @@ CACHE = {
     "last_update": 0
 }
 
-CACHE_TIME = 310  # seconds
+# Refresh cache every 60 seconds
+CACHE_TIME = 60
 
-# Persistent session for better stability
+
+# -----------------------
+# REQUEST SESSION + RETRIES
+# -----------------------
 requests_session = requests.Session()
+
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+
+requests_session.mount("https://", adapter)
+requests_session.mount("http://", adapter)
 
 
 # -----------------------
@@ -25,7 +43,7 @@ requests_session = requests.Session()
 def safe_json(value):
     """
     ALWAYS return valid JSON with a value field.
-    Value is returned as a STRING for maximum compatibility.
+    Value is returned as STRING for maximum compatibility.
     """
 
     try:
@@ -106,7 +124,7 @@ def get_cached_value():
 
     now = time.time()
 
-    # Only refresh cache if expired
+    # Refresh cache if expired
     if now - CACHE["last_update"] > CACHE_TIME:
 
         try:
@@ -137,9 +155,6 @@ def total_players():
 
         value = get_cached_value()
 
-        if value is None:
-            value = 0
-
         return safe_json(value)
 
     except Exception as e:
@@ -159,7 +174,7 @@ def health():
 
 
 # -----------------------
-# DEBUG
+# DEBUG ENDPOINT
 # -----------------------
 @app.route("/debug")
 def debug():
